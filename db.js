@@ -3,16 +3,35 @@ const path = require("path");
 const fs = require("fs");
 const { generateMockProducts } = require("./mockData");
 
-// Use /tmp directory for serverless environments
-const isServerless = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.VERCEL;
-const DB_DIR = isServerless ? "/tmp" : path.join(__dirname, "data");
+// More reliable detection for serverless environments
+const isServerless =
+  process.env.AWS_LAMBDA_FUNCTION_NAME ||
+  process.env.VERCEL ||
+  process.env.NODE_ENV === "production" ||
+  fs.existsSync("/var/task");
 
-// Create the data directory if it doesn't exist and we're not in a serverless environment
-if (!isServerless && !fs.existsSync(DB_DIR)) {
-  fs.mkdirSync(DB_DIR);
+console.log("Serverless environment detected:", isServerless);
+console.log("VERCEL env variable:", process.env.VERCEL);
+
+// Use /tmp directory for serverless environments (writable in serverless)
+let DB_DIR = isServerless ? "/tmp" : path.join(__dirname, "data");
+console.log("Using database directory:", DB_DIR);
+
+// Create the data directory if needed and we're not in a serverless environment
+try {
+  if (!isServerless && !fs.existsSync(DB_DIR)) {
+    fs.mkdirSync(DB_DIR);
+    console.log("Created database directory:", DB_DIR);
+  }
+} catch (err) {
+  console.error("Error creating directory:", err);
+  // Fallback to /tmp if we can't create the directory
+  DB_DIR = "/tmp";
 }
 
 const DB_PATH = path.join(DB_DIR, "inventory.sqlite");
+console.log("Database path:", DB_PATH);
+
 const db = new sqlite3.Database(DB_PATH);
 
 // Initialize database
