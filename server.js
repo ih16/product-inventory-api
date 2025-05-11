@@ -71,8 +71,12 @@ const swaggerOptions = {
     ],
     servers: [
       {
-        url: `http://localhost:${PORT}`,
-        description: "Development server",
+        url: process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : `http://localhost:${PORT}`,
+        description: process.env.VERCEL_URL
+          ? "Production server"
+          : "Development server",
       },
     ],
   },
