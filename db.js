@@ -3,9 +3,12 @@ const path = require("path");
 const fs = require("fs");
 const { generateMockProducts } = require("./mockData");
 
-// Create the data directory if it doesn't exist
-const DB_DIR = path.join(__dirname, "data");
-if (!fs.existsSync(DB_DIR)) {
+// Use /tmp directory for serverless environments
+const isServerless = process.env.AWS_LAMBDA_FUNCTION_NAME || process.env.VERCEL;
+const DB_DIR = isServerless ? "/tmp" : path.join(__dirname, "data");
+
+// Create the data directory if it doesn't exist and we're not in a serverless environment
+if (!isServerless && !fs.existsSync(DB_DIR)) {
   fs.mkdirSync(DB_DIR);
 }
 
