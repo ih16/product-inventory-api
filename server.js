@@ -14,20 +14,52 @@ const PORT = process.env.PORT || 8000;
 const PRODUCTS_FILE = path.join(__dirname, "products.json");
 const API_KEYS_FILE = path.join(__dirname, "apiKeys.json");
 
-// Function to save products to file
+// In-memory storage for Vercel environment
+let inMemoryProducts = null;
+let inMemoryApiKeys = {};
+
+// Check if we're running in Vercel's production environment
+const isVercel = process.env.VERCEL === "1";
+
+// Function to save products to file or memory
 const saveProductsToFile = (products) => {
-  fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2));
-  console.log("Products saved to file");
+  if (isVercel) {
+    inMemoryProducts = products;
+    console.log("Products saved to memory");
+  } else {
+    fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2));
+    console.log("Products saved to file");
+  }
 };
 
-// Function to save API keys to file
+// Function to save API keys to file or memory
 const saveApiKeysToFile = (keys) => {
-  fs.writeFileSync(API_KEYS_FILE, JSON.stringify(keys, null, 2));
-  console.log("API keys saved to file");
+  if (isVercel) {
+    inMemoryApiKeys = keys;
+    console.log("API keys saved to memory");
+  } else {
+    fs.writeFileSync(API_KEYS_FILE, JSON.stringify(keys, null, 2));
+    console.log("API keys saved to file");
+  }
 };
 
-// Function to load products from file
+// Function to load products from file or memory
 const loadProductsFromFile = () => {
+  if (isVercel) {
+    if (inMemoryProducts) {
+      return inMemoryProducts;
+    }
+    // Initialize with products.json if available
+    try {
+      const data = fs.readFileSync(PRODUCTS_FILE, "utf8");
+      console.log("Products loaded from initial file");
+      return JSON.parse(data);
+    } catch (err) {
+      console.error("Error loading initial products:", err);
+      return null;
+    }
+  }
+
   try {
     if (fs.existsSync(PRODUCTS_FILE)) {
       const data = fs.readFileSync(PRODUCTS_FILE, "utf8");
@@ -40,8 +72,12 @@ const loadProductsFromFile = () => {
   return null;
 };
 
-// Function to load API keys from file
+// Function to load API keys from file or memory
 const loadApiKeysFromFile = () => {
+  if (isVercel) {
+    return inMemoryApiKeys;
+  }
+
   try {
     if (fs.existsSync(API_KEYS_FILE)) {
       const data = fs.readFileSync(API_KEYS_FILE, "utf8");
