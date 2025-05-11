@@ -63,6 +63,51 @@ const swaggerOptions = {
           name: "x-api-key",
         },
       },
+      // Add schema definition for Product
+      schemas: {
+        Product: {
+          type: "object",
+          properties: {
+            id: {
+              type: "integer",
+              description: "The product ID",
+            },
+            title: {
+              type: "string",
+              description: "Product title",
+            },
+            price: {
+              type: "number",
+              description: "Product price",
+            },
+            description: {
+              type: "string",
+              description: "Product description",
+            },
+            category: {
+              type: "string",
+              description: "Product category",
+            },
+            images: {
+              type: "array",
+              items: {
+                type: "string",
+              },
+              description: "Array of image URLs",
+            },
+            createdAt: {
+              type: "string",
+              format: "date-time",
+              description: "Creation timestamp",
+            },
+            updatedAt: {
+              type: "string",
+              format: "date-time",
+              description: "Last update timestamp",
+            },
+          },
+        },
+      },
     },
     security: [
       {
