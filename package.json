@@ -19,6 +19,6 @@
   },
   "devDependencies": {
     "nodemon": "^3.0.1",
-    "vercel": "^32.5.0"
+    "vercel": "^41.7.4"
   }
 }
