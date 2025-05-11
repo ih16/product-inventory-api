@@ -6,99 +6,41 @@ const swaggerJsdoc = require("swagger-jsdoc");
 const swaggerUi = require("swagger-ui-express");
 const { v4: uuidv4 } = require("uuid");
 const { generateMockProducts } = require("./mockData");
-const fs = require("fs");
 const path = require("path");
 const app = express();
 const PORT = process.env.PORT || 8000;
 
-const PRODUCTS_FILE = path.join(__dirname, "products.json");
-const API_KEYS_FILE = path.join(__dirname, "apiKeys.json");
+// Import database operations
+const {
+  initializeDatabase,
+  getProductsFromDb,
+  saveProductsToDb,
+  getApiKeysFromDb,
+  saveApiKeyToDb,
+  removeApiKeyFromDb,
+  initializeWithMockDataIfEmpty,
+} = require("./db");
 
-// In-memory storage for Vercel environment
-let inMemoryProducts = null;
-let inMemoryApiKeys = {};
+// Initialize database
+let products = [];
+let apiKeys = {};
 
-// Check if we're running in Vercel's production environment
-const isVercel = process.env.VERCEL === "1";
-
-// Function to save products to file or memory
-const saveProductsToFile = (products) => {
-  if (isVercel) {
-    inMemoryProducts = products;
-    console.log("Products saved to memory");
-  } else {
-    fs.writeFileSync(PRODUCTS_FILE, JSON.stringify(products, null, 2));
-    console.log("Products saved to file");
-  }
-};
-
-// Function to save API keys to file or memory
-const saveApiKeysToFile = (keys) => {
-  if (isVercel) {
-    inMemoryApiKeys = keys;
-    console.log("API keys saved to memory");
-  } else {
-    fs.writeFileSync(API_KEYS_FILE, JSON.stringify(keys, null, 2));
-    console.log("API keys saved to file");
-  }
-};
-
-// Function to load products from file or memory
-const loadProductsFromFile = () => {
-  if (isVercel) {
-    if (inMemoryProducts) {
-      return inMemoryProducts;
-    }
-    // Initialize with products.json if available
-    try {
-      const data = fs.readFileSync(PRODUCTS_FILE, "utf8");
-      console.log("Products loaded from initial file");
-      return JSON.parse(data);
-    } catch (err) {
-      console.error("Error loading initial products:", err);
-      return null;
-    }
-  }
-
+// Asynchronously initialize the application
+const initializeApp = async () => {
   try {
-    if (fs.existsSync(PRODUCTS_FILE)) {
-      const data = fs.readFileSync(PRODUCTS_FILE, "utf8");
-      console.log("Products loaded from file");
-      return JSON.parse(data);
-    }
+    await initializeDatabase();
+    await initializeWithMockDataIfEmpty();
+
+    // Load products and API keys
+    products = (await getProductsFromDb()) || [];
+    apiKeys = await getApiKeysFromDb();
+
+    console.log(`Loaded ${products.length} products from database`);
+    console.log(`Loaded ${Object.keys(apiKeys).length} API keys from database`);
   } catch (err) {
-    console.error("Error loading products from file:", err);
+    console.error("Error initializing application:", err);
   }
-  return null;
 };
-
-// Function to load API keys from file or memory
-const loadApiKeysFromFile = () => {
-  if (isVercel) {
-    return inMemoryApiKeys;
-  }
-
-  try {
-    if (fs.existsSync(API_KEYS_FILE)) {
-      const data = fs.readFileSync(API_KEYS_FILE, "utf8");
-      console.log("API keys loaded from file");
-      return JSON.parse(data);
-    }
-  } catch (err) {
-    console.error("Error loading API keys from file:", err);
-  }
-  return {};
-};
-
-// Load existing products or generate new ones
-let products = loadProductsFromFile();
-if (!products) {
-  products = generateMockProducts(100);
-  saveProductsToFile(products);
-}
-
-// Load existing API keys
-let apiKeys = loadApiKeysFromFile();
 
 // Middleware
 app.use(express.json());
@@ -141,7 +83,7 @@ const swaggerSpec = swaggerJsdoc(swaggerOptions);
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
 
 // API Key middleware
-const validateApiKey = (req, res, next) => {
+const validateApiKey = async (req, res, next) => {
   const apiKey = req.headers["x-api-key"];
 
   // Skip validation for API key generation endpoint
@@ -161,8 +103,8 @@ const validateApiKey = (req, res, next) => {
 
   if (Date.now() > keyData.expiresAt) {
     delete apiKeys[apiKey];
-    // Save the updated apiKeys object after removing expired keys
-    saveApiKeysToFile(apiKeys);
+    // Remove the expired key from database
+    await removeApiKeyFromDb(apiKey);
     return res.status(401).json({ message: "API key has expired" });
   }
 
@@ -206,11 +148,9 @@ app.use(validateApiKey);
  *                   type: string
  *                   format: date-time
  */
-app.post("/api/auth/generate-key", (req, res) => {
+app.post("/api/auth/generate-key", async (req, res) => {
   const { expiresIn = "1d", masterKey } = req.body;
 
-  console.log("Master Key:", masterKey);
-  console.log("masterKey from env:", process.env.MASTER_KEY);
   if (masterKey !== process.env.MASTER_KEY) {
     return res.status(403).json({ message: "Invalid master key" });
   }
@@ -235,57 +175,26 @@ app.post("/api/auth/generate-key", (req, res) => {
   const expiresAt = Date.now() + durationMs;
   const apiKey = uuidv4();
 
-  apiKeys[apiKey] = {
+  const keyData = {
     expiresAt,
     createdAt: Date.now(),
   };
 
-  // Save updated API keys to file
-  saveApiKeysToFile(apiKeys);
+  apiKeys[apiKey] = keyData;
 
-  res.json({
-    apiKey,
-    expiresAt: new Date(expiresAt).toISOString(),
-  });
+  // Save to database
+  try {
+    await saveApiKeyToDb(apiKey, keyData);
+
+    res.json({
+      apiKey,
+      expiresAt: new Date(expiresAt).toISOString(),
+    });
+  } catch (err) {
+    console.error("Error saving API key:", err);
+    res.status(500).json({ message: "Error generating API key" });
+  }
 });
-
-/**
- * @swagger
- * components:
- *   schemas:
- *     Product:
- *       type: object
- *       properties:
- *         id:
- *           type: integer
- *           description: The product ID
- *         title:
- *           type: string
- *           description: The product title
- *         price:
- *           type: number
- *           format: float
- *           description: The product price
- *         description:
- *           type: string
- *           description: The product description
- *         category:
- *           type: string
- *           description: The product category
- *         images:
- *           type: array
- *           items:
- *             type: string
- *           description: URLs to product images
- *         createdAt:
- *           type: string
- *           format: date-time
- *           description: Creation date
- *         updatedAt:
- *           type: string
- *           format: date-time
- *           description: Last update date
- */
 
 /**
  * @swagger
@@ -534,26 +443,33 @@ app.get("/api/categories", (req, res) => {
  *       403:
  *         description: Invalid master key
  */
-app.post("/api/admin/regenerate-products", (req, res) => {
+app.post("/api/admin/regenerate-products", async (req, res) => {
   const { count = 100, masterKey } = req.body;
 
   if (masterKey !== process.env.MASTER_KEY) {
     return res.status(403).json({ message: "Invalid master key" });
   }
 
-  products = generateMockProducts(count);
-  saveProductsToFile(products);
+  try {
+    products = generateMockProducts(count);
+    await saveProductsToDb(products);
 
-  res.json({
-    message: "Products regenerated successfully",
-    count: products.length,
-  });
+    res.json({
+      message: "Products regenerated successfully",
+      count: products.length,
+    });
+  } catch (err) {
+    console.error("Error regenerating products:", err);
+    res.status(500).json({ message: "Error regenerating products" });
+  }
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(
-    `Swagger documentation available at http://localhost:${PORT}/api-docs`
-  );
+// Initialize app and start server
+initializeApp().then(() => {
+  app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    console.log(
+      `Swagger documentation available at http://localhost:${PORT}/api-docs`
+    );
+  });
 });

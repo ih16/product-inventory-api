@@ -137,9 +137,33 @@ curl -X POST http://localhost:8000/api/admin/regenerate-products \
 
 ## Data Persistence
 
-The server stores:
+The server uses SQLite for data persistence:
 
-- Products data in `products.json`
-- API keys in `apiKeys.json`
+- Database is stored in `data/inventory.sqlite`
+- Products are stored in the `products` table
+- API keys are stored in the `api_keys` table
 
-These files are created automatically if they don't exist.
+The database file and directory are created automatically if they don't exist.
+
+## Database Schema
+
+### Products Table
+
+```
+id INTEGER PRIMARY KEY
+title TEXT NOT NULL
+price REAL NOT NULL
+description TEXT
+category TEXT
+images TEXT (stored as JSON string)
+createdAt TEXT
+updatedAt TEXT
+```
+
+### API Keys Table
+
+```
+api_key TEXT PRIMARY KEY
+expires_at INTEGER NOT NULL
+created_at INTEGER NOT NULL
+```

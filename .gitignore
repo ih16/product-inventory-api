@@ -32,6 +32,7 @@ yarn-error.log*
 *.swp
 *.swo
 
-#Static persistent storage as JSON files
-apiKeys.json
-products.json
+# Database files
+data/
+*.sqlite
+*.sqlite3
